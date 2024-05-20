@@ -10,7 +10,6 @@ body {
 }
 
 #container {
-  width: 800px;
   max-width: 100%;
   margin: 0 auto;
   padding: 12px 24px;
@@ -27,21 +26,132 @@ fieldset {
   padding: 0;
 }
 
-#error {
+.error {
   color: red;
-  font-weight: bold;
-  font-size: 0.8em;
-  margin: 1em 0;
 }
 
-#warning {
+.warning {
   color: orange;
-  font-weight: bold;
-  font-size: 0.8em;
+}
+
+.info {
+  color: blue;
+}
+
+#console {
+  background-color: #f4f4f4;
+  padding: 1em;
   margin: 1em 0;
+  font-size: 0.8em;
 }
 
 #available-players {
   width: 100%;
   height: 250px;
+}
+
+#teams-container {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-around;
+}
+
+.team {
+  width: 361px;
+  border: 1px dashed black;
+}
+
+.team .header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-evenly;
+  height: 80px;
+}
+
+.team .header .team-score {
+  font-size: 1.2em;
+  font-weight: bold;
+  margin: 0 1em;
+  background-color: aqua;
+  border-radius: 50%;
+  display: flex;
+  width: 60px;
+  height: 60px;
+  justify-content: center;
+  align-items: center;
+  border: 2px solid black;
+}
+
+.team .header .team-name {
+  font-weight: bold;
+  font-size: 1.6em;
+}
+
+.court {
+  background: url(court.svg) center no-repeat;
+  width: 361px;
+  height: 338px;
+  position: relative;
+}
+
+.court .player {
+  position: absolute;
+  text-align: center;
+  margin-left: -20px;
+  margin-top: -20px;
+  width: 40px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.court .player .name {
+  font-size: 12px;
+}
+
+.court .player .role {
+  width: 40px;
+  height: 40px;
+  border: 2px solid black;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: bold;
+  background-color: white;
+}
+
+.court .player .role.out-of-position-error {
+  background-color: orange;
+}
+
+.court .player .role.out-of-position-warning {
+  background-color: #ddd;
+}
+
+.court .role-pg {
+  left: 50%;
+  top: 70%;
+}
+
+.court .role-pf {
+  top: 18%;
+  left: 26%;
+}
+
+.court .role-c {
+  top: 31%;
+  left: 72%;
+}
+
+.court .role-sg {
+  top: 57%;
+  left: 17%;
+}
+
+.court .role-sf {
+  top: 8%;
+  left: 78%;
 }

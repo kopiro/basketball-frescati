@@ -4,7 +4,7 @@
 // - SG: Shooting Guard
 // - SF: Small Forward
 // - PF: Power Forward
-const roles = ["C", "PG", "SG", "SF", "PF"];
+const roles = ["PG", "SG", "SF", "PF", "C"];
 
 // - Overall: the overall quality of the player
 // - Inside scoring: how good the player is at scoring inside the paint
@@ -15,13 +15,13 @@ const roles = ["C", "PG", "SG", "SF", "PF"];
 // - Athleticism: how good the player is at running and jumping
 // - Height: how tall the player is
 const stats = [
-  "overall",
-  "inside",
-  "outside",
-  "playmaking",
-  "athleticism",
-  "defending",
-  "rebounding",
+  "Overall",
+  "Inside",
+  "Outside",
+  "Playmaking",
+  "Athleticism",
+  "Defending",
+  "Rebounding",
 ];
 
 async function downloadPlayers(key, sheetName) {
@@ -35,7 +35,7 @@ async function downloadPlayers(key, sheetName) {
   const data = csvRows.slice(1).map((row) => {
     const values = row.split(",");
     return headers.reduce((obj, header, index) => {
-      header = header.replace(/"/g, "").trim().toLowerCase();
+      header = header.replace(/"/g, "").trim();
       obj[header] = values[index].replace(/"/g, "").trim();
       return obj;
     }, {});
@@ -56,139 +56,207 @@ async function downloadPlayers(key, sheetName) {
 function filterPlayers(allPlayers, availablePlayers) {
   // Filter the players that are in the available players list
   const players = allPlayers.filter((row) =>
-    availablePlayers.includes(row.name)
+    availablePlayers.includes(row.Name)
   );
 
   return players;
 }
 
-function showError(error) {
-  const errorElement = document.getElementById("error");
-  errorElement.innerText = error;
-  throw error;
+function showLog(message, level) {
+  const node = document.createElement("div");
+  node.classList.add(level);
+  node.innerText = message;
+  document.getElementById("console").appendChild(node);
+  if (level === "error") {
+    throw new Error(message);
+  }
 }
 
-function showWarning(warning) {
-  const warningElement = document.getElementById("warning");
-  // Add a node
-  var node = document.createElement("div");
-  node.innerText = warning;
-  warningElement.appendChild(node);
-}
+// Loop through all combinations of orders of roles, and find the one the minimizes the score difference
+// But also maximize the score of the team
 
-// Function to balance teams
-function createTeams(players, numTeams, teamSize) {
+function createTeams(players, numTeams) {
   // Initialize teams
-  const teams = Array.from({ length: numTeams }, () => []);
-
-  // Split players by role
-  const centers = players.filter((player) => player.role === "C");
-  const pointGuards = players.filter((player) => player.role === "PG");
-  const others = players.filter(
-    (player) => player.role !== "C" && player.role !== "PG"
-  );
-
-  // Sort players by score (from lowest to highest)
-  centers.sort((a, b) => b.score - a.score);
-  pointGuards.sort((a, b) => b.score - a.score);
-
-  // Distribute Centers and Point Guards
-  for (let i = 0; i < numTeams; i++) {
-    if (centers.length > 0) {
-      teams[i].push(centers.pop());
-    }
-    if (pointGuards.length > 0) {
-      teams[i].push(pointGuards.pop());
-    }
-  }
-
-  // Distribute the rest of the players
-  // Add unused centers and point guards to the others list
-  centers.forEach((center) => others.push(center));
-  pointGuards.forEach((pg) => others.push(pg));
-
-  // Sort
-  others.sort((a, b) => b.score - a.score);
-
-  let i = 0;
-  while (teams.some((team) => team.length < teamSize) && others.length > 0) {
-    if (teams[i % numTeams].length < teamSize) {
-      teams[i % numTeams].push(others.shift());
-    }
-    i++;
-  }
-
-  // Show warning for all players that were not included in the teams
-  if (others.length > 0) {
-    showWarning(
-      `The following players were not included in the teams: ${others
-        .map((player) => player.name)
-        .join(", ")}`
-    );
-  }
-
-  // Ensure all teams have 5 players
-  teams.forEach((team) => {
-    if (team.length < teamSize) {
-      showError("Not enough players to complete the teams");
-    }
+  const teams = Array.from({ length: numTeams }, () => {
+    return roles.reduce((acc, role) => {
+      acc[role] = null;
+      return acc;
+    }, {});
   });
 
-  // Balance teams based on overall stats
-  balanceTeams(teams);
+  const byRoles = roles.reduce((acc, role) => {
+    acc[role] = [
+      ...players
+        .filter((player) => player.Role === role)
+        .map((player) => ({
+          ...player,
+          assignedRole: role,
+          scoreByRole: player.score,
+          penalty: 1,
+        }))
+        .sort((a, b) => b.scoreByRole - a.scoreByRole),
+      ...players
+        .filter((player) => player.SecondaryRole === role)
+        .map((player) => ({
+          ...player,
+          assignedRole: role,
+          scoreByRole: player.score * 0.9,
+          penalty: 0.9,
+        }))
+        .sort((a, b) => b.scoreByRole - a.scoreByRole),
+      ...players
+        .filter((player) => player.TertiaryRole === role)
+        .map((player) => ({
+          ...player,
+          assignedRole: role,
+          scoreByRole: player.score * 0.6,
+          penalty: 0.6,
+        }))
+        .sort((a, b) => b.scoreByRole - a.scoreByRole),
+    ];
 
-  return teams;
+    // Add a index for everyone
+    let index = 0;
+    for (const player of acc[role]) {
+      player.index = index++;
+    }
+
+    return acc;
+  }, {});
+
+  // Now loop through the teams and assign players by spreading out the score
+  // So, for the first one, get the first best role, for the second one, get the second best role, etc.
+  const orderedRoles = roles
+    .map((e) => {
+      const playersInRole = players.filter((player) => player.Role === e);
+      return { role: e, count: playersInRole.length };
+    })
+    .sort((a, b) => a.count - b.count);
+
+  showLog(
+    "Ordered roles: " +
+      orderedRoles.map((e) => `${e.role} (${e.count})`).join(", "),
+    "info"
+  );
+
+  let teamIndex = 0;
+
+  // Loop until all teams have assigned players for all roles
+  while (teams.some((team) => roles.some((role) => team[role] === null))) {
+    for (const { role } of orderedRoles) {
+      if (teams[teamIndex][role] !== null) {
+        continue;
+      }
+
+      const player = byRoles[role].shift();
+      if (!player) {
+        showLog(
+          `Needed a role "${role}" for team ${
+            teamIndex + 1
+          }, but couldn't find any player left`,
+          "error"
+        );
+      }
+
+      teams[teamIndex][role] = player;
+
+      // Remove the player from the other roles
+      roles.forEach((r) => {
+        byRoles[r] = byRoles[r].filter((p) => p.Name !== player.Name);
+      });
+
+      showLog(
+        `Assigning player "${player.Name}" to role "${role}" in "Team ${
+          teamIndex + 1
+        }" - position ${
+          player.index + 1
+        } in the list of ${role} with a score of ${player.scoreByRole.toFixed(
+          0
+        )} ppts`,
+        "info"
+      );
+
+      if (player.Role !== role) {
+        showLog(
+          `Player "${player.Name}" is playing out of position: ${player.Role} -> ${role}, ${player.score} * ${player.penalty} ppts -> ${player.scoreByRole} ppts`,
+          "warning"
+        );
+      }
+
+      // Find the teamIndex with the lowest score
+      const teamScores = teams.map(calculateTeamScore);
+      teamIndex = teamScores.indexOf(Math.min(...teamScores));
+
+      // teamIndex = (teamIndex + 1) % numTeams;
+    }
+  }
+
+  return balanceTeams(teams);
+}
+
+function calculateScoreDifference(teams) {
+  const scores = teams.map(calculateTeamScore);
+  const maxScore = Math.max(...scores);
+  const minScore = Math.min(...scores);
+  return maxScore - minScore;
+}
+
+function calculateTeamScore(team) {
+  return roles.reduce(
+    (sum, role) => sum + (team[role] ? team[role].scoreByRole : 0),
+    0
+  );
+}
+
+function swapPlayers(team1, team2, role) {
+  const temp = team1[role];
+  team1[role] = team2[role];
+  team2[role] = temp;
+}
+
+function deepCloneTeams(teams) {
+  return teams.map((team) => {
+    const newTeam = {};
+    for (const role in team) {
+      newTeam[role] = { ...team[role] };
+    }
+    return newTeam;
+  });
 }
 
 function balanceTeams(teams) {
-  let balanced = false;
-  let balanceThreshold = 5;
-  let maxAttempts = 100; // Prevent infinite loop
-  let attempts = 0;
+  let minDifference = calculateScoreDifference(teams);
+  let bestTeams = deepCloneTeams(teams);
 
-  while (!balanced && attempts < maxAttempts) {
-    const teamStats = teams.map((team) =>
-      team.reduce((acc, player) => acc + player.score, 0)
-    );
+  for (let i = 0; i < teams.length - 1; i++) {
+    for (let j = i + 1; j < teams.length; j++) {
+      for (const role of roles) {
+        const clonedTeams = deepCloneTeams(teams);
+        swapPlayers(clonedTeams[i], clonedTeams[j], role);
+        const newDifference = calculateScoreDifference(clonedTeams);
 
-    let maxIndex = teamStats.indexOf(Math.max(...teamStats));
-    let minIndex = teamStats.indexOf(Math.min(...teamStats));
+        if (newDifference < minDifference) {
+          showLog(
+            `Swapping players in role "${role}" ("${
+              clonedTeams[i][role].Name
+            }" with "${clonedTeams[j][role].Name}") between teams ${
+              i + 1
+            } and ${
+              j + 1
+            } reduces the score difference from ${minDifference.toFixed(
+              2
+            )} to ${newDifference.toFixed(2)}`,
+            "info"
+          );
 
-    if (teamStats[maxIndex] - teamStats[minIndex] <= balanceThreshold) {
-      balanced = true;
-    } else {
-      // Swap the player with the highest score from the strongest team
-      // with the player with the lowest score from the weakest team
-      let maxPlayerIndex = teams[maxIndex].reduce(
-        (maxIdx, player, idx, arr) =>
-          player.score > arr[maxIdx].score ? idx : maxIdx,
-        0
-      );
-      let minPlayerIndex = teams[minIndex].reduce(
-        (minIdx, player, idx, arr) =>
-          player.score < arr[minIdx].score ? idx : minIdx,
-        0
-      );
-
-      let temp = teams[maxIndex][maxPlayerIndex];
-      teams[maxIndex][maxPlayerIndex] = teams[minIndex][minPlayerIndex];
-      teams[minIndex][minPlayerIndex] = temp;
-
-      attempts++;
-    }
-
-    // Increase balanceThreshold if the loop is taking too long
-    if (attempts % 10 === 0) {
-      balanceThreshold += 5;
-      showWarning(`Increasing balance threshold: ${balanceThreshold}`);
+          minDifference = newDifference;
+          bestTeams = clonedTeams;
+        }
+      }
     }
   }
 
-  if (attempts >= maxAttempts) {
-    showWarning(
-      `Teams could not be balanced within ${maxAttempts} attempts. Last threshold: ${balanceThreshold}`
-    );
-  }
+  return bestTeams;
 }
 
 function parseAvailablePlayers(allPlayers) {
@@ -202,10 +270,10 @@ function parseAvailablePlayers(allPlayers) {
 
   return playersLines.map((playerName) => {
     const player = allPlayers.find((player) => {
-      return player.name.toLowerCase() === playerName.toLowerCase();
+      return player.Name.toLowerCase() === playerName.toLowerCase();
     });
     if (!player) {
-      showError(`Player "${playerName}" not found`);
+      showLog(`Player "${playerName}" not found`, "error");
     }
     return player;
   });
@@ -216,40 +284,70 @@ const sheetName = "Players";
 
 async function onButtonClick() {
   // Clear error and warning messages
-  const errorElement = document.getElementById("error");
-  errorElement.innerText = "";
-  const warningElement = document.getElementById("warning");
-  warningElement.innerHTML = "";
+  const $console = document.getElementById("console");
+  $console.innerHTML = "";
 
-  const teamSize = parseInt(document.querySelector("#team-size").value);
   const allPlayers = await downloadPlayers(key, sheetName);
 
-  console.log("allPlayers :>> ", allPlayers);
-
   const players = parseAvailablePlayers(allPlayers);
-  const numTeams = Math.floor(players.length / teamSize);
+  const numTeams = Math.floor(players.length / roles.length);
 
-  const teams = createTeams(players, numTeams, teamSize);
+  const teams = createTeams(players, numTeams);
 
   // Display the teams in the HTML
-  const teamsContainer = document.getElementById("teams-container");
-  teamsContainer.innerHTML = "";
+  const $teamsContainer = document.getElementById("teams-container");
+  $teamsContainer.innerHTML = "";
+
   teams.forEach((team, index) => {
-    const teamElement = document.createElement("div");
-    teamElement.classList.add("team");
-    teamElement.innerHTML = `<h2>Team ${index + 1}</h2>`;
-    team.forEach((player) => {
-      const playerElement = document.createElement("div");
-      playerElement.classList.add("player");
-      playerElement.innerHTML = `<strong>${player.name}</strong> (${player.role})`;
-      teamElement.appendChild(playerElement);
+    const $team = document.createElement("div");
+    $team.classList.add("team");
+
+    const $header = document.createElement("div");
+    $header.classList.add("header");
+
+    const $teamName = document.createElement("div");
+    $teamName.classList.add("team-name");
+    $teamName.innerHTML = `Team ${index + 1}`;
+    $header.appendChild($teamName);
+
+    const $teamScore = document.createElement("div");
+    $teamScore.classList.add("team-score");
+    $teamScore.innerHTML = calculateTeamScore(team).toFixed(0);
+    $header.appendChild($teamScore);
+
+    $team.appendChild($header);
+
+    const $court = document.createElement("div");
+    $court.classList.add("court");
+
+    roles.forEach((role) => {
+      const player = team[role];
+      const $player = document.createElement("div");
+
+      $player.classList.add("player");
+      $player.classList.add(`role-${role.toLowerCase()}`);
+
+      const $role = document.createElement("div");
+      $role.classList.add("role");
+      $role.innerText = role;
+
+      if (player.penalty <= 0.6) {
+        $role.classList.add("out-of-position-error");
+      } else if (player.penalty <= 0.9) {
+        $role.classList.add("out-of-position-warning");
+      }
+      $player.appendChild($role);
+
+      const $name = document.createElement("div");
+      $name.classList.add("name");
+      $name.innerText = `${player.Name} (${player.Role})`;
+      $player.appendChild($name);
+
+      $court.appendChild($player);
     });
-    const scoreElement = document.createElement("div");
-    scoreElement.classList.add("score");
-    const score = team.reduce((acc, player) => acc + player.score, 0);
-    scoreElement.innerHTML = `Total score: ${score}`;
-    teamElement.appendChild(scoreElement);
-    teamsContainer.appendChild(teamElement);
+
+    $team.appendChild($court);
+    $teamsContainer.appendChild($team);
   });
 }
 
